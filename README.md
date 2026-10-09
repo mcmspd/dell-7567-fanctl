@@ -1,5 +1,7 @@
 # dell-7567-fanctl
 
+> **Warning: rhythmic fan noise.** This trades acoustics for response speed. With only 3 SMM states (`off/low/max`) and 2s polling plus temp/power kicks, fans step audibly between `0/~2300/~4900 RPM` instead of gliding. Expect repeated spin up/down under bursty loads. If that bothers you, raise `HYST_OFFSET`, `POLL_INTERVAL`, and kick thresholds in `dell-fanctl-fast.conf`, or stay on stock BIOS control.
+
 Fast-transient fan control for Dell Inspiron 14/15 7000 Gaming 7567/7577 (i7-7700HQ + GTX 1050) on Linux. No BIOS/EC flash.
 
 Stock firmware ramps slow (DPTF ~3s poll, 4C hysteresis, 2-10C active steps) and holds fans on after cool-down. This drives both fans from `max(CPU,GPU)` + RAPL package power with derivative + feedforward kicks.
