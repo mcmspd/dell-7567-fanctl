@@ -1,0 +1,64 @@
+<?xml version="1.0"?>
+<!-- thermald fast-transient for 7567/7577: lower trip temps + short sampling to fix DPTF lag.
+     Stock from decompiled DptfTa1/2: _TSP=CPUS/SSP1-8 (~3s), _NTT=0xADE, GTSH 4C/2C, _AC steps 2/5/10C.
+     This forces: poll 1s, CPU passive 75C->70C, active roof lowered 5C, hysteresis tight.
+     Place at /etc/thermald/thermal-conf.xml, restart thermald, verify with thermald loglevel debug. -->
+<ThermalConfiguration>
+  <Platform>
+    <Name>Dell Inspiron 7567/7577 fast transient</Name>
+    <ProductName>*</ProductName>
+    <Preference>QUIET</Preference>
+    <ThermalZones>
+      <ThermalZone>
+        <Type>cpu</Type>
+        <TripPoints>
+          <TripPoint>
+            <SensorType>x86_pkg_temp</SensorType>
+            <Temperature>70000</Temperature>
+            <type>passive</type>
+            <ControlType>SEQUENTIAL</ControlType>
+            <CoolingDevice><Type>Processor</Type><Influence>50</Influence><SamplingPeriod>1</SamplingPeriod></CoolingDevice>
+          </TripPoint>
+          <TripPoint>
+            <SensorType>x86_pkg_temp</SensorType>
+            <Temperature>55000</Temperature>
+            <type>active</type>
+            <ControlType>SEQUENTIAL</ControlType>
+            <CoolingDevice><Type>FAN</Type><Influence>100</Influence><SamplingPeriod>1</SamplingPeriod></CoolingDevice>
+          </TripPoint>
+          <TripPoint>
+            <SensorType>x86_pkg_temp</SensorType>
+            <Temperature>50000</Temperature>
+            <type>active</type>
+            <ControlType>SEQUENTIAL</ControlType>
+            <CoolingDevice><Type>FAN</Type><Influence>60</Influence><SamplingPeriod>1</SamplingPeriod></CoolingDevice>
+          </TripPoint>
+        </TripPoints>
+      </ThermalZone>
+      <ThermalZone>
+        <Type>gpu</Type>
+        <TripPoints>
+          <TripPoint>
+            <SensorType>nvidia</SensorType>
+            <Temperature>55000</Temperature>
+            <type>active</type>
+            <ControlType>SEQUENTIAL</ControlType>
+            <CoolingDevice><Type>FAN</Type><Influence>100</Influence><SamplingPeriod>1</SamplingPeriod></CoolingDevice>
+          </TripPoint>
+          <TripPoint>
+            <SensorType>nvidia</SensorType>
+            <Temperature>50000</Temperature>
+            <type>active</type>
+            <ControlType>SEQUENTIAL</ControlType>
+            <CoolingDevice><Type>FAN</Type><Influence>60</Influence><SamplingPeriod>1</SamplingPeriod></CoolingDevice>
+          </TripPoint>
+        </TripPoints>
+      </ThermalZone>
+    </ThermalZones>
+    <CoolingDevices>
+      <CoolingDevice><Type>FAN</Type><Path>/sys/class/hwmon/hwmon*/pwm1</Path><MinState>0</MinState><MaxState>2</MaxState><IncDecStep>1</IncDecStep><ReadBack>0</ReadBack><DebouncePeriod>1</DebouncePeriod></CoolingDevice>
+      <CoolingDevice><Type>FAN</Type><Path>/sys/class/hwmon/hwmon*/pwm2</Path><MinState>0</MinState><MaxState>2</MaxState><IncDecStep>1</IncDecStep><ReadBack>0</ReadBack><DebouncePeriod>1</DebouncePeriod></CoolingDevice>
+      <CoolingDevice><Type>Processor</Type><Path>/sys/devices/system/cpu/cpufreq/policy0</Path><MinState>0</MinState><MaxState>10</MaxState><IncDecStep>1</IncDecStep></CoolingDevice>
+    </CoolingDevices>
+  </Platform>
+</ThermalConfiguration>

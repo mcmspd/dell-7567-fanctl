@@ -1,0 +1,15 @@
+[Unit]
+Description=Dell 7567/7577 fast-transient fan control (SMM i8k, no flash)
+After=multi-user.target
+Wants=thermald.service
+
+[Service]
+Type=simple
+ExecStartPre=/usr/bin/dell-bios-fan-control 0
+ExecStart=/usr/local/bin/fan-control-fast.sh /usr/local/etc/dell-fanctl.conf
+ExecStopPost=/usr/bin/dell-bios-fan-control 1
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

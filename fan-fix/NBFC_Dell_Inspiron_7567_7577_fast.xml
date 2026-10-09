@@ -1,0 +1,152 @@
+<?xml version="1.0"?>
+<!-- Dell Inspiron 14/15 7000 Gaming 7567/7577 (077C/0798) — fast-transient NBFC profile
+     BIOS 1.15.0, Linux. Fixes slow climb + slow spin-down.
+     WARNING: EC firmware is encrypted (PHCM container at EC 0x1000, entropy 7.94),
+     stock EC registers below are PROBE CANDIDATES, not factory values.
+     Validate with `ec-probe` / NBFC `ec-probe` before use. See ../FAN_FIX_GUIDE.md.
+     If EC probe fails, use dell-smm-hwmon + i8kfan path instead (Option A2). -->
+<FanControlConfigV2 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <NotebookModel>Dell Inspiron 15 7000 Gaming 7567/7577 (fast transient)</NotebookModel>
+  <Author>FW-Decompile2 / BIOS 1.15.0 analysis</Author>
+  <!-- 500ms poll fixes DPTF _TSP lag (stock _TSP=CPUS/SSP1-8, typically 3s). Do not go below 300ms on SMM EC. -->
+  <EcPollInterval>500</EcPollInterval>
+  <ReadWriteWords>false</ReadWriteWords>
+  <CriticalTemperature>95</CriticalTemperature>
+  <FanConfigurations>
+    <!-- Shared heatpipe: BOTH fans follow max(CPU,GPU) with identical fast curve.
+         Early kick at 50C fixes spike-before-ramp. 3C down-hysteresis fixes slow spin-down
+         (stock DPTF GTSH=0x28=4C in DptfTa1, 0x14=2C in Ta2/Sds). Steps 5C (stock _AC 2/5/10C). -->
+    <FanConfiguration>
+      <ReadRegister>149</ReadRegister>
+      <WriteRegister>148</WriteRegister>
+      <MinSpeedValue>247</MinSpeedValue>
+      <MaxSpeedValue>95</MaxSpeedValue>
+      <IndependentReadMinMaxValues>false</IndependentReadMinMaxValues>
+      <MinSpeedValueRead>0</MinSpeedValueRead>
+      <MaxSpeedValueRead>0</MaxSpeedValueRead>
+      <ResetRequired>true</ResetRequired>
+      <FanSpeedResetValue>14</FanSpeedResetValue>
+      <TemperatureThresholds>
+        <TemperatureThreshold>
+          <UpThreshold>0</UpThreshold>
+          <DownThreshold>0</DownThreshold>
+          <FanSpeed>0</FanSpeed>
+        </TemperatureThreshold>
+        <TemperatureThreshold>
+          <UpThreshold>50</UpThreshold>
+          <DownThreshold>47</DownThreshold>
+          <FanSpeed>25</FanSpeed>
+        </TemperatureThreshold>
+        <TemperatureThreshold>
+          <UpThreshold>55</UpThreshold>
+          <DownThreshold>52</DownThreshold>
+          <FanSpeed>38</FanSpeed>
+        </TemperatureThreshold>
+        <TemperatureThreshold>
+          <UpThreshold>60</UpThreshold>
+          <DownThreshold>57</DownThreshold>
+          <FanSpeed>52</FanSpeed>
+        </TemperatureThreshold>
+        <TemperatureThreshold>
+          <UpThreshold>65</UpThreshold>
+          <DownThreshold>62</DownThreshold>
+          <FanSpeed>65</FanSpeed>
+        </TemperatureThreshold>
+        <TemperatureThreshold>
+          <UpThreshold>70</UpThreshold>
+          <DownThreshold>67</DownThreshold>
+          <FanSpeed>78</FanSpeed>
+        </TemperatureThreshold>
+        <TemperatureThreshold>
+          <UpThreshold>75</UpThreshold>
+          <DownThreshold>72</DownThreshold>
+          <FanSpeed>90</FanSpeed>
+        </TemperatureThreshold>
+        <TemperatureThreshold>
+          <UpThreshold>80</UpThreshold>
+          <DownThreshold>77</DownThreshold>
+          <FanSpeed>100</FanSpeed>
+        </TemperatureThreshold>
+      </TemperatureThresholds>
+      <FanSpeedPercentageOverrides>
+        <FanSpeedPercentageOverride>
+          <FanSpeedPercentage>100</FanSpeedPercentage>
+          <FanSpeedValue>10</FanSpeedValue>
+          <TargetOperation>ReadWrite</TargetOperation>
+        </FanSpeedPercentageOverride>
+      </FanSpeedPercentageOverrides>
+    </FanConfiguration>
+    <FanConfiguration>
+      <ReadRegister>151</ReadRegister>
+      <WriteRegister>150</WriteRegister>
+      <MinSpeedValue>247</MinSpeedValue>
+      <MaxSpeedValue>95</MaxSpeedValue>
+      <IndependentReadMinMaxValues>false</IndependentReadMinMaxValues>
+      <MinSpeedValueRead>0</MinSpeedValueRead>
+      <MaxSpeedValueRead>0</MaxSpeedValueRead>
+      <ResetRequired>true</ResetRequired>
+      <FanSpeedResetValue>14</FanSpeedResetValue>
+      <TemperatureThresholds>
+        <TemperatureThreshold>
+          <UpThreshold>0</UpThreshold>
+          <DownThreshold>0</DownThreshold>
+          <FanSpeed>0</FanSpeed>
+        </TemperatureThreshold>
+        <TemperatureThreshold>
+          <UpThreshold>50</UpThreshold>
+          <DownThreshold>47</DownThreshold>
+          <FanSpeed>25</FanSpeed>
+        </TemperatureThreshold>
+        <TemperatureThreshold>
+          <UpThreshold>55</UpThreshold>
+          <DownThreshold>52</DownThreshold>
+          <FanSpeed>38</FanSpeed>
+        </TemperatureThreshold>
+        <TemperatureThreshold>
+          <UpThreshold>60</UpThreshold>
+          <DownThreshold>57</DownThreshold>
+          <FanSpeed>52</FanSpeed>
+        </TemperatureThreshold>
+        <TemperatureThreshold>
+          <UpThreshold>65</UpThreshold>
+          <DownThreshold>62</DownThreshold>
+          <FanSpeed>65</FanSpeed>
+        </TemperatureThreshold>
+        <TemperatureThreshold>
+          <UpThreshold>70</UpThreshold>
+          <DownThreshold>67</DownThreshold>
+          <FanSpeed>78</FanSpeed>
+        </TemperatureThreshold>
+        <TemperatureThreshold>
+          <UpThreshold>75</UpThreshold>
+          <DownThreshold>72</DownThreshold>
+          <FanSpeed>90</FanSpeed>
+        </TemperatureThreshold>
+        <TemperatureThreshold>
+          <UpThreshold>80</UpThreshold>
+          <DownThreshold>77</DownThreshold>
+          <FanSpeed>100</FanSpeed>
+        </TemperatureThreshold>
+      </TemperatureThresholds>
+      <FanSpeedPercentageOverrides>
+        <FanSpeedPercentageOverride>
+          <FanSpeedPercentage>100</FanSpeedPercentage>
+          <FanSpeedValue>10</FanSpeedValue>
+          <TargetOperation>ReadWrite</TargetOperation>
+        </FanSpeedPercentageOverride>
+      </FanSpeedPercentageOverrides>
+    </FanConfiguration>
+  </FanConfigurations>
+  <RegisterWriteConfigurations>
+    <RegisterWriteConfiguration>
+      <WriteMode>Set</WriteMode>
+      <WriteOccasion>OnWriteFanSpeed</WriteOccasion>
+      <Register>147</Register>
+      <Value>255</Value>
+      <ResetRequired>true</ResetRequired>
+      <ResetValue>14</ResetValue>
+      <ResetWriteMode>Set</ResetWriteMode>
+      <Description>Set EC to manual control (Dell 7348 heritage; verify on 7567, else use i8k/dell-bios-fan-control)</Description>
+    </RegisterWriteConfiguration>
+  </RegisterWriteConfigurations>
+</FanControlConfigV2>
