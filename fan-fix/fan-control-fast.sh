@@ -2,8 +2,9 @@
 # Dell 7567/7577 fast-transient fan loop (SMM path, no EC flash).
 # Requires: dell-smm-hwmon (modprobe), i8kutils, dell-bios-fan-control (to disable BIOS auto).
 # Why this fixes lag: stock DPTF _TSP=CPUS/SSP1-8 (~3s) + _NTT=0xADE + GTSH=4C + _AC steps 2/5/10C
-# hold fan low through a spike and high after cool-down. This loop polls 2s, kicks early at 50C,
-# uses 3C down-hysteresis for fast spin-down, and forces max on dT/dt spike (derivative kick).
+# hold fan low through a spike and high after cool-down. This loop polls 2s, stages 0->1
+# on sustained kick/mid-level, promotes 1->2 only on confirmed heavy load, steps down
+# with dwell (never cuts out), and uses 3C down-hysteresis for spin-down.
 # Source: DSDT GENS/SMI 0xE0 path, DptfTa1/2 _TSP/_AC/GTSH, EC PHCM encrypted (no direct EC table mod).
 set -u
 CONF="${1:-/usr/local/etc/dell-fanctl.conf}"
@@ -14,14 +15,21 @@ TEMP_LOW_GPU=${TEMP_LOW_GPU:-58}
 TEMP_HIGH_GPU=${TEMP_HIGH_GPU:-70}
 HYST_OFFSET=${HYST_OFFSET:-3}
 POLL_INTERVAL=${POLL_INTERVAL:-2}
-DERIV_KICK=${DERIV_KICK:-6}   # temp rise C/poll -> full blast immediately
-POWER_HIGH=${POWER_HIGH:-40}   # package W >= this -> full blast (7700HQ PL1 45W/PL2 60W; 40W catches turbo early, steadier than freq)
-POWER_DELTA=${POWER_DELTA:-25} # package W jump/poll -> full blast (25W ignores idle 10-25W wobble, catches 10->40W bursts)
-POWER_LOW=${POWER_LOW:-10}     # package W below this -> workload over, drop max->1 even before temp falls
+DERIV_KICK=${DERIV_KICK:-8}   # temp rise C/poll -> stage-one kick (needs KICK_SUSTAIN consecutive polls)
+POWER_HIGH=${POWER_HIGH:-45}   # package W >= this + temp>=LOW -> stage-one kick (7700HQ PL1 45W/PL2 60W; 45W ignores trivial turbo bursts)
+POWER_DELTA=${POWER_DELTA:-30} # package W jump/poll + temp>=LOW -> stage-one kick (30W ignores idle 10-25W wobble, catches sustained bursts)
+POWER_LOW=${POWER_LOW:-10}     # package W below this counts as cool (step 2->1) even before temp falls
+KICK_SUSTAIN=${KICK_SUSTAIN:-2} # consecutive kick polls required before 0->1 (kills single-poll sensor/RAPL noise)
+PROMOTE_SUSTAIN=${PROMOTE_SUSTAIN:-3} # consecutive heavy polls in state 1 before 1->2 (heavy = temp>=HIGH, or temp>=mid with power>=POWER_HIGH)
+DOWN_SUSTAIN=${DOWN_SUSTAIN:-3} # consecutive cool polls required before stepping down 2->1 or 1->0 (no abrupt cut, no flap)
+EMERG_HIGH=${EMERG_HIGH:-85}   # thermal safety net: temp>=this -> immediate MAX from any state (25C below 95C critical)
 MAX_STATE=${MAX_STATE:-2}      # i8k states 0/1/2 (3=auto on some, do NOT use here)
 
 prev=0
 prev_power=0
+kick_hits=0
+heavy_hits=0
+cool_hits=0
 state=0
 first_run=1
 # Disable BIOS auto once at start (EC fights sysfs pwm otherwise -> snaps back to 0).
@@ -58,7 +66,7 @@ read_temps() {
   cur=$cpu; src="CPU"; [ "$gpu" -gt "$cur" ] && { cur=$gpu; src="GPU"; }
   echo "$cur $cpu $gpu $src"
 }
-echo "dell-fanctl fast shared-cooler: CPU LOW=$TEMP_LOW HIGH=$TEMP_HIGH / GPU LOW=$TEMP_LOW_GPU HIGH=$TEMP_HIGH_GPU HYST=$HYST_OFFSET POLL=$POLL_INTERVAL tempKICK>$DERIV_KICK power>=$POWER_HIGH/jump>$POWER_DELTA W max(CPU,GPU,power)->both fans"
+echo "dell-fanctl staged shared-cooler: CPU LOW=$TEMP_LOW HIGH=$TEMP_HIGH EMERG=$EMERG_HIGH / GPU LOW=$TEMP_LOW_GPU HIGH=$TEMP_HIGH_GPU HYST=$HYST_OFFSET POLL=$POLL_INTERVAL kick>=${DERIV_KICK}C/${POWER_HIGH}W/Δ${POWER_DELTA}W x${KICK_SUSTAIN}->1, heavy x${PROMOTE_SUSTAIN}->2, cool x${DOWN_SUSTAIN} steps down"
 prev_energy=$(cat /sys/class/powercap/intel-rapl:0/energy_uj 2>/dev/null || echo 0)
 prev_energy_max=$(cat /sys/class/powercap/intel-rapl:0/max_energy_range_uj 2>/dev/null || echo 262143328850)
 while true; do
@@ -74,22 +82,57 @@ while true; do
   mid=$(( (low+high)/2 ))
   dt=$((cur - prev))
   dpower=$((power - prev_power))
-  # Temp delta kick: rise >5C/poll on EITHER die -> full blast immediately
-  # Power feedforward: package burst means heat is incoming before temp follows (steadier than freq)
-  if { [ "$dt" -gt 5 ] || [ "$power" -ge "$POWER_HIGH" ] || [ "$dpower" -ge "$POWER_DELTA" ]; } && [ "$state" -lt "$MAX_STATE" ]; then
-    state=$MAX_STATE
-    set_fan "$state"
-    echo "$(date +%T) max=${cur}C(CPU=${cpu} GPU=${gpu} src=${src}) power=${power}W dT=+${dt} dP=+${dpower} KICK -> both fans $state (full blast)"
-  elif [ "$cur" -ge "$high" ]; then
-    [ "$state" -ne "$MAX_STATE" ] && { state=$MAX_STATE; set_fan "$state"; echo "$(date +%T) max=${cur}C(CPU=${cpu} GPU=${gpu} src=${src}) >=HIGH($high) -> both fans $state"; }
-  elif [ "$cur" -ge "$mid" ] && [ "$state" -eq 0 ]; then
-    state=1; set_fan "$state"; echo "$(date +%T) max=${cur}C(CPU=${cpu} GPU=${gpu} src=${src}) mid($mid) -> both fans $state"
-  elif [ "$cur" -le "$((low-HYST_OFFSET))" ]; then
-    [ "$state" -ne 0 ] && { state=0; set_fan "$state"; echo "$(date +%T) max=${cur}C(CPU=${cpu} GPU=${gpu} src=${src}) <=LOW-HYST($((low-HYST_OFFSET))) -> both fans $state"; }
-  elif [ "$power" -lt "$POWER_LOW" ] && [ "$state" -eq "$MAX_STATE" ]; then
-    state=1; set_fan "$state"; echo "$(date +%T) max=${cur}C(CPU=${cpu} GPU=${gpu} src=${src}) power=${power}W<LOW($POWER_LOW) workload over -> both fans $state"
-  elif [ "$cur" -le "$((high-HYST_OFFSET))" ] && [ "$state" -eq "$MAX_STATE" ]; then
-    state=1; set_fan "$state"; echo "$(date +%T) max=${cur}C(CPU=${cpu} GPU=${gpu} src=${src}) power=${power}W <=HIGH-HYST($((high-HYST_OFFSET))) -> both fans $state"
+  # Staged ramp with confirmation (anti-flap):
+  #   0->1 on sustained kick or instant mid-level (fast to LOW, NEVER straight to MAX).
+  #   1->2 only after PROMOTE_SUSTAIN consecutive heavy polls
+  #       (heavy = temp>=HIGH, or temp>=mid with power>=POWER_HIGH, or fast temp rise).
+  #   2->1 / 1->0 only after DOWN_SUSTAIN consecutive cool polls (steps down, never cuts out).
+  #   temp>=EMERG_HIGH -> immediate MAX from any state (thermal safety net).
+  kick_want=0; kick_reason=""
+  if [ "$dt" -ge "$DERIV_KICK" ]; then
+    kick_want=1; kick_reason="dT=+${dt}>=${DERIV_KICK}"
+  elif [ "$cur" -ge "$low" ] && { [ "$power" -ge "$POWER_HIGH" ] || [ "$dpower" -ge "$POWER_DELTA" ]; }; then
+    kick_want=1; kick_reason="power=${power}W dP=+${dpower}"
+  fi
+  if [ "$kick_want" -eq 1 ]; then kick_hits=$((kick_hits+1)); else kick_hits=0; fi
+  heavy=0
+  if [ "$cur" -ge "$high" ] || { [ "$cur" -ge "$mid" ] && [ "$power" -ge "$POWER_HIGH" ]; } || [ "$dt" -ge "$DERIV_KICK" ]; then heavy=1; fi
+  if [ "$state" -eq 1 ] && [ "$heavy" -eq 1 ]; then heavy_hits=$((heavy_hits+1)); else heavy_hits=0; fi
+  want_cool=0
+  if [ "$state" -eq "$MAX_STATE" ]; then
+    { [ "$cur" -le "$((high-HYST_OFFSET))" ] || [ "$power" -lt "$POWER_LOW" ]; } && want_cool=1
+  elif [ "$state" -eq 1 ]; then
+    [ "$cur" -le "$((low-HYST_OFFSET))" ] && want_cool=1
+  fi
+  if [ "$want_cool" -eq 1 ]; then cool_hits=$((cool_hits+1)); else cool_hits=0; fi
+  reset_counts() { kick_hits=0; heavy_hits=0; cool_hits=0; }
+  if [ "$cur" -ge "$EMERG_HIGH" ]; then
+    if [ "$state" -ne "$MAX_STATE" ]; then
+      state=$MAX_STATE; set_fan "$state"
+      echo "$(date +%T) max=${cur}C(CPU=${cpu} GPU=${gpu} src=${src}) >=EMERG($EMERG_HIGH) -> both fans $state"
+    fi
+    reset_counts
+  elif [ "$state" -eq 0 ]; then
+    if [ "$kick_hits" -ge "$KICK_SUSTAIN" ]; then
+      reset_counts; state=1; set_fan "$state"
+      echo "$(date +%T) max=${cur}C(CPU=${cpu} GPU=${gpu} src=${src}) power=${power}W ${kick_reason} sustained=${KICK_SUSTAIN} STAGE-ONE -> both fans $state"
+    elif [ "$cur" -ge "$mid" ]; then
+      reset_counts; state=1; set_fan "$state"
+      echo "$(date +%T) max=${cur}C(CPU=${cpu} GPU=${gpu} src=${src}) mid($mid) -> both fans $state"
+    fi
+  elif [ "$state" -eq 1 ]; then
+    if [ "$heavy_hits" -ge "$PROMOTE_SUSTAIN" ]; then
+      reset_counts; state=$MAX_STATE; set_fan "$state"
+      echo "$(date +%T) max=${cur}C(CPU=${cpu} GPU=${gpu} src=${src}) power=${power}W heavy x${PROMOTE_SUSTAIN} CONFIRMED -> both fans $state"
+    elif [ "$cool_hits" -ge "$DOWN_SUSTAIN" ]; then
+      reset_counts; state=0; set_fan "$state"
+      echo "$(date +%T) max=${cur}C(CPU=${cpu} GPU=${gpu} src=${src}) cool x${DOWN_SUSTAIN} <=LOW-HYST($((low-HYST_OFFSET))) -> both fans $state"
+    fi
+  elif [ "$state" -eq "$MAX_STATE" ]; then
+    if [ "$cool_hits" -ge "$DOWN_SUSTAIN" ]; then
+      reset_counts; state=1; set_fan "$state"
+      echo "$(date +%T) max=${cur}C(CPU=${cpu} GPU=${gpu} src=${src}) power=${power}W cool x${DOWN_SUSTAIN} -> both fans $state"
+    fi
   fi
   prev=$cur
   prev_power=$power

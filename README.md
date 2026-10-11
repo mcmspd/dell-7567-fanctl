@@ -17,7 +17,7 @@ No prompts (needs passwordless sudo once). Installs `thermald`, `i8kutils`, `del
 ## How it works
 
 - `fan-fix/fan-control-fast.sh` — 2s loop, shared heatpipe: both `pwm1+pwm2` follow `max(CPU [coretemp+dell_smm], GPU [dell_smm+nvidia-smi])` + RAPL package power (`intel-rapl:0`, PL1 45W/PL2 60W).
-- Thresholds (`fan-fix/dell-fanctl-fast.conf`): off `<=55C`, low from `>=64C`, full blast `>=70C`, temp kick `>+5C/poll`, power kick `>=40W` / jump `>+25W`, power spin-down `<10W` drops max→low before temp falls.
+- Staged ramp (`fan-fix/dell-fanctl-fast.conf`): sustained kick (`>=+8C/poll`, `>=45W` / jump `>=+30W` gated on temp `>=LOW`, `KICK_SUSTAIN=2` polls) or `>=64C` takes fans `0→1` only — never straight to max. `1→2` needs `PROMOTE_SUSTAIN=3` confirmed heavy polls (`>=70C`, or `>=64C` with `>=45W`). Step-downs `2→1→0` need `DOWN_SUSTAIN=3` cool polls each (never cuts out). Safety net: `>=85C` → immediate max.
 - `fan-fix/dell-fanctl.service` — disables BIOS auto on start (`dell-bios-fan-control 0`), restores on stop.
 - `fan-fix/thermald-fast.xml` — 1s sampling, CPU+GPU active trips.
 - `fan-fix/NBFC_Dell_Inspiron_7567_7577_fast.xml` — optional NBFC profile (needs EC probe; SMM path is default).
